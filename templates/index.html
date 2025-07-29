@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>考勤互动仪表盘</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <style> body { padding: 1.5rem; } .status-chip { font-size: .9rem; } </style>
+</head>
+<body>
+<div class="container">
+  <h1 class="mb-4">📡 考勤互动仪表盘</h1>
+
+  <div class="mb-3 d-flex align-items-center gap-2">
+    <button class="btn btn-outline-primary" onclick="fetchStatus()">刷新</button>
+    <button class="btn btn-outline-success" onclick="triggerScan()">手动扫描</button>
+
+    <!-- 设备类型过滤 -->
+    <div class="form-check form-check-inline ms-3">
+      <input class="form-check-input" type="radio" name="f_type" id="f_all" value="" checked onchange="applyFilters()">
+      <label class="form-check-label" for="f_all">全部</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="f_type" id="f_pc" value="电脑" onchange="applyFilters()">
+      <label class="form-check-label" for="f_pc">电脑</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="radio" name="f_type" id="f_phone" value="手机" onchange="applyFilters()">
+      <label class="form-check-label" for="f_phone">手机</label>
+    </div>
+
+    <input
+      id="search"
+      class="form-control w-25 ms-auto"
+      type="search"
+      placeholder="搜索 IP/名称"
+      oninput="applyFilters()"
+    >
+    <span id="status" class="ms-2 text-muted">加载中…</span>
+  </div>
+
+  <table class="table table-hover">
+    <thead class="table-light">
+      <tr>
+        <th>状态</th><th>姓名</th><th>类型</th><th>IP</th>
+        <th>最后在线</th><th>时长</th><th>备注</th>
+      </tr>
+    </thead>
+    <tbody id="body">
+      <tr><td colspan="7">暂无数据</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let currentData = {};
+
+// 将所有行标记为“查询中”
+function markQuerying(){
+  document.querySelectorAll("#body tr").forEach(row=>{
+    const cell = row.querySelector(".status-chip");
+    if(cell) {
+      cell.className = "badge bg-warning status-chip";
+      cell.innerText = "查询中";
+    }
+  });
+}
+
+async function fetchStatus(){
+  document.getElementById("status").innerText = "刷新中…";
+  const res = await fetch("/api/status");
+  currentData = await res.json();
+  renderTable(currentData);
+  applyFilters();
+}
+
+async function triggerScan(){
+  markQuerying();
+  document.getElementById("status").innerText = "扫描中…";
+  const res = await fetch("/api/scan",{method:"POST"});
+  currentData = await res.json();
+  renderTable(currentData);
+  applyFilters();
+}
+
+async function updateDevice(ip, field, value){
+  await fetch("/api/device",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ip, [field]:value})
+  });
+}
+
+function renderTable({online, offline, now}){
+  document.getElementById("status").innerText = `最后更新：${now}`;
+  const body = document.getElementById("body");
+  body.innerHTML = "";
+  // 在线行
+  for(let ip in online){
+    const info = online[ip];
+    body.insertAdjacentHTML("beforeend", `
+      <tr data-type="${info.type}">
+        <td>
+          <span class="badge bg-primary status-chip">在线</span>
+        </td>
+        <td><a href="/device/${ip}">${info.name}</a></td>
+        <td><input class="form-control form-control-sm" value="${info.type}"
+                   onchange="updateDevice('${ip}','type',this.value)" /></td>
+        <td>${ip}</td>
+        <td>${info.last_seen}</td>
+        <td>${info.duration}</td>
+        <td><input class="form-control form-control-sm"
+                   value="${info.remark||''}"
+                   onchange="updateDevice('${ip}','remark',this.value)" /></td>
+      </tr>`);
+  }
+  // 离线行
+  for(let ip in offline){
+    const info = offline[ip];
+    body.insertAdjacentHTML("beforeend", `
+      <tr data-type="${info.type}">
+        <td>
+          <span class="badge bg-danger status-chip">离线</span>
+        </td>
+        <td><a href="/device/${ip}">${info.name}</a></td>
+        <td><input class="form-control form-control-sm" value="${info.type}"
+                   onchange="updateDevice('${ip}','type',this.value)" /></td>
+        <td>${ip}</td>
+        <td>—</td>
+        <td>—</td>
+        <td><input class="form-control form-control-sm"
+                   value="${info.remark||''}"
+                   onchange="updateDevice('${ip}','remark',this.value)" /></td>
+      </tr>`);
+  }
+  if(!Object.keys(online).length && !Object.keys(offline).length){
+    body.innerHTML = `<tr><td colspan="7" class="text-center">暂无设备</td></tr>`;
+  }
+}
+
+function applyFilters(){
+  const kw = document.getElementById("search").value.toLowerCase();
+  const type = document.querySelector('input[name="f_type"]:checked').value;
+  document.querySelectorAll("#body tr").forEach(row=>{
+    const txt = row.textContent.toLowerCase();
+    const dtype = row.getAttribute("data-type");
+    const okText = !kw || txt.includes(kw);
+    const okType = !type || dtype===type;
+    row.style.display = okText && okType ? "" : "none";
+  });
+}
+
+// 初始化
+fetchStatus();
+setInterval(fetchStatus, 10000);
+</script>
+</body>
+</html>
