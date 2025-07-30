@@ -1,4 +1,4 @@
-import time, threading, json, os
+import time, threading, json, os, subprocess
 from ping3 import ping
 
 # 文件路径
@@ -20,6 +20,22 @@ def save_json(path, data):
 def load_devices():
     return load_json(DEVICES_FILE)
 
+# 尝试通过 ping3 或系统 "ping" 命令判断 IP 是否在线
+def is_online(ip, timeout=1):
+    try:
+        if ping(ip, timeout=timeout):
+            return True
+    except Exception:
+        pass
+    try:
+        res = subprocess.run(
+            ["ping", "-c", "1", "-W", str(timeout), ip],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
 def check_online_devices():
     now     = time.strftime("%Y-%m-%d %H:%M:%S")
     devices = load_devices()
@@ -28,11 +44,15 @@ def check_online_devices():
     # 1️⃣ 扫描在线设备
     status = {}
     for ip in devices:
-        if ping(ip, timeout=1):
-            status[ip] = {"last_seen": now}
-            # 新上线则记录起始时间
-            if ip not in session:
-                session[ip] = now
+        try:
+            if is_online(ip, timeout=1):
+                status[ip] = {"last_seen": now}
+                # 新上线则记录起始时间
+                if ip not in session:
+                    session[ip] = now
+        except Exception:
+            # 遇到异常直接忽略该 IP
+            continue
 
     # 2️⃣ 清理下线的 session
     for ip in list(session):
@@ -59,6 +79,9 @@ def check_online_devices():
 def start_loop(interval=30):
     def loop():
         while True:
-            check_online_devices()
+            try:
+                check_online_devices()
+            except Exception as e:
+                print(f"[scan error] {e}")
             time.sleep(interval)
     threading.Thread(target=loop, daemon=True).start()
