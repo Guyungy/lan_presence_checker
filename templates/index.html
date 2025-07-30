@@ -71,19 +71,27 @@ function markQuerying(){
 
 async function fetchStatus(){
   document.getElementById("status").innerText = "刷新中…";
-  const res = await fetch("/api/status");
-  currentData = await res.json();
-  renderTable(currentData);
-  applyFilters();
+  try{
+    const res = await fetch("/api/status");
+    currentData = await res.json();
+    renderTable(currentData);
+    applyFilters();
+  }catch(e){
+    document.getElementById("status").innerText = "加载失败";
+  }
 }
 
 async function triggerScan(){
   markQuerying();
   document.getElementById("status").innerText = "扫描中…";
-  const res = await fetch("/api/scan",{method:"POST"});
-  currentData = await res.json();
-  renderTable(currentData);
-  applyFilters();
+  try{
+    const res = await fetch("/api/scan",{method:"POST"});
+    currentData = await res.json();
+    renderTable(currentData);
+    applyFilters();
+  }catch(e){
+    document.getElementById("status").innerText = "扫描失败";
+  }
 }
 
 async function updateDevice(ip, field, value){
