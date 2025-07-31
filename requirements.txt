@@ -1,0 +1,5 @@
+flask>=2.0.0
+ping3>=4.0.0
+ipaddress>=0.0.0
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
